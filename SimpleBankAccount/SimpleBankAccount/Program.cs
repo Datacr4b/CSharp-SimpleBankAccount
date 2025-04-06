@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,26 +12,30 @@ namespace SimpleBankAccount
         private static List<Account> accounts = new List<Account>();
         private static string input;
         private static string accNumber;
-        private static string owner;
         static void Main(string[] args)
         {
             while (true)
             {
+                Console.Clear();
                 Console.WriteLine("Create Account (c)");
                 Console.WriteLine("Deposit into Account (d)");
                 Console.WriteLine("Withdraw from Account (w)");
                 Console.WriteLine("Transfer to Account (t)");
+                Console.WriteLine("View the Accounts (v)");
                 Console.WriteLine("Quit (q)");
-                Console.WriteLine("Choose option: ");
-                input = Console.ReadLine();
-                if (!string.IsNullOrEmpty(input))
+                input = GetValidInput("Choose option: ");
+                input = input.Trim().ToLower();
+                if (input == "c" || input == "d" || input == "w" || input=="t")
                 {
-                    input = input.Trim().ToLower();
-                    if (input == "c" || input == "d" || input == "w")
-                    {
-                        AccountOperations(input);
-                    }
-
+                    AccountOperations(input);
+                }
+                else if (input == "v")
+                {
+                    DisplayAccounts();
+                }
+                else if (input == "q")
+                {
+                    break;
                 }
                 else
                 {
@@ -42,73 +47,113 @@ namespace SimpleBankAccount
 
         static void AccountOperations(string entry)
         {
-            while (true) // Name Loop
+
+            input = GetValidInput("Enter your name: ");
+            accNumber = GetValidInput("Enter your account number: ");
+
+            Predicate<Account> check = acc => acc.AccountNumber == accNumber && acc.Owner == input;
+            Account existingAcc = accounts.Find(check);
+            if (entry=="c") // Creating Account
             {
-                Console.WriteLine("Enter your name: ");
-                input= Console.ReadLine();
-                if (!string.IsNullOrEmpty(input))
+                string accountEntry = GetValidInput("Enter which account to create, Checking (c) or Savings (s): ");
+                accountEntry = accountEntry.Trim().ToLower();
+                if (existingAcc == null)
                 {
-                    owner = input;
-                    while(true) // Account Number Loop
+                    if (accountEntry == "c" || accountEntry == "checking")
                     {
-                        Console.WriteLine("Enter your account number: ");
-                        accNumber = Console.ReadLine();
-                        if (!string.IsNullOrEmpty(accNumber))
-                        {
-                            Predicate<Account> check = acc => acc.AccountNumber == accNumber && acc.Owner == owner;
-                            if (entry=="c") // Creating Account
-                            {
-                                Account existingAcc = accounts.Find(check);
-                                if (existingAcc == null)
-                                    accounts.Add(new Account(input, accNumber));
-                                else
-                                    Console.WriteLine("Account already exists");
-                                break;
-                            }
-                            else // Deposit and Withdraw
-                            {
-                                while (true) // Amount Loop
-                                {
-                                    Console.WriteLine("Enter the amount: ");
-                                    input=Console.ReadLine();
-                                    if (WithdrawDeposit(entry, input, check))
-                                        break;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine("Invalid Account Number");
-                            Console.ReadLine();
-                        }
+                        accounts.Add(new CheckingAccount(input, accNumber, 5m));
+                        Console.WriteLine("Checking Account successfully created!");
+                    }
+                    else if (accountEntry == "s" || accountEntry == "savings")
+                    {
+                        accounts.Add(new SavingsAccount(input, accNumber, 5m));
+                        Console.WriteLine("Savings Account successfully created!");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid Account type");
                     }
                 }
                 else
-                {
-                    Console.WriteLine("Invalid name");
-                    Console.ReadLine();
-                }
+                    Console.WriteLine("Account already exists");
             }
+            else if (entry=="d" || entry=="w" || entry=="t" ) // Deposit, Withdraw and Transfer
+            {
+                decimal amount;
+                amount = GetValidDecimal("Enter your amount: ");
+                Operations(entry, amount, existingAcc);
+            }
+            Console.ReadLine();
         }
 
-        static bool WithdrawDeposit(string entry, string input, Predicate<Account> check)
+        static void Operations(string entry, decimal amount, Account existingAcc)
         {
-            Account existingAcc = accounts.Find(check);
-            decimal amount;
-
-            if (Decimal.TryParse(input, out amount))
+            if (existingAcc != null)
             {
                 if (entry == "d")
                     existingAcc.Deposit(amount);
                 else if (entry == "w")
                     existingAcc.Withdraw(amount);
-                return true;
+                else if (entry == "t")
+                {
+                    input = GetValidInput("Enter the name of the account to Transfer to: ");
+                    accNumber = GetValidInput("Enter the account number: ");
+                    existingAcc.Transfer(amount, accNumber, input, accounts);
+                    
+                }
             }
             else
             {
-                Console.WriteLine("Invalid amount");
-                Console.ReadLine();
-                return false;
+                Console.WriteLine("This account doesn't exist");
+            }
+        }
+
+        static void DisplayAccounts()
+        {
+            foreach(Account account in accounts)
+            {
+                Console.WriteLine($"Owner: {account.Owner}, Account Number: {account.AccountNumber}, Balance: {account.Balance}");
+            }
+            Console.ReadLine();
+        }
+
+        static string GetValidInput(string localisation)
+        {
+            string owner; 
+            while (true) // Input Loop
+            {
+                Console.WriteLine(localisation);
+                owner = Console.ReadLine();
+                if (!string.IsNullOrEmpty(owner))
+                {
+                    return owner;
+                }
+                else
+                {
+                    Console.WriteLine("Invalid Input");
+                    Console.ReadLine();
+                }
+            }
+        }
+
+        static decimal GetValidDecimal(string localisation)
+        {
+            decimal amount;
+            string stringAmount;
+
+            while (true) // Input Loop
+            {
+                Console.WriteLine(localisation);
+                stringAmount = Console.ReadLine();
+                if (Decimal.TryParse(stringAmount, out amount) && amount > 0)
+                {
+                    return amount;
+                }
+                else
+                {
+                    Console.WriteLine("Invalid Input");
+                    Console.ReadLine();
+                }
             }
         }
 
@@ -134,7 +179,7 @@ namespace SimpleBankAccount
         public decimal Balance
         {
             get { return balance; }
-            set { balance = value; }
+            protected set { balance = value; }
         }
 
         public Account(string owner, string accountNumber)
@@ -144,25 +189,105 @@ namespace SimpleBankAccount
             Balance = 0;
         }
 
-        public void Deposit(decimal amount)
+        public virtual void Deposit(decimal amount)
         {
             Balance += amount;
             Console.WriteLine($"Deposited {amount:C}");
         }
 
-        public decimal Withdraw(decimal amount)
+        public virtual decimal Withdraw(decimal amount)
         {
-            Balance -= amount;
-            return amount;
+            if (Balance >= amount)
+            {
+                Balance -= amount;
+                Console.WriteLine($"Withdrew {amount:C}");
+                return amount;
+            }
+            else
+            {
+                Console.WriteLine("Insufficient funds on your account");
+                return 0;
+            }
         }
 
-        public void Transfer(decimal amount, string accnumber, string owner, List<Account> accounts, Predicate<Account> check)
+        public virtual void Transfer(decimal amount, string accnumber, string owner, List<Account> accounts)
         {
+            Predicate<Account> check = acc => acc.AccountNumber == accnumber && acc.Owner == owner;
             Account transferAcc = accounts.Find(check);
             if (transferAcc != null)
             {
-                transferAcc.Balance += amount;
-                this.Balance -= amount;
+                if (Balance >= amount)
+                {
+                    transferAcc.Balance += amount;
+                    Balance -= amount;
+                    Console.WriteLine("Successfully transfered the amount on the account");
+                }
+                else
+                {
+                    Console.WriteLine("Insufficient Balance on your account");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Account doesn't exist");
+            }
+        }
+    }
+
+    class SavingsAccount : Account
+    {
+        private decimal interestRate;
+        public SavingsAccount(string owner, string accountNumber, decimal interestRate)  : base (owner, accountNumber) 
+        { 
+            this.interestRate = interestRate;
+        }
+
+        public void ApplyInterest()
+        {
+            decimal interest = Balance * interestRate;
+            Balance += interest;
+            Console.WriteLine($"Applied interest: {interest:C}");
+        }
+
+
+        public override decimal Withdraw(decimal amount)
+        {
+            if (Balance >= amount)
+            {
+                Balance -= amount + 5m;
+                Console.WriteLine($"Withdrew {amount:C} and {5m:C} in fees.");
+                return amount;
+            }
+            else
+            {
+                Console.WriteLine("Insufficient funds on your account");
+                return 0;
+            }
+        }
+    }
+
+    class CheckingAccount : Account
+    {
+        private decimal overdraftFee;
+
+        public CheckingAccount(string owner, string accountNumber, decimal overdraftFee) : base(owner, accountNumber)
+        {
+            this.overdraftFee = overdraftFee;
+        }
+
+        public override decimal Withdraw(decimal amount)
+        {
+            if (Balance < amount)
+            {
+                Balance -= amount + overdraftFee;
+                Console.WriteLine($"Withdrew {amount:C} and {overdraftFee:C} in overdraft fees.");
+                return amount;
+            }
+            else
+            {
+                Balance -= amount;
+                Console.WriteLine($"Withdrew {amount:C}");
+                return amount;
             }
         }
     }
